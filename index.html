@@ -1,0 +1,38 @@
+<script>
+    let ws;
+    let username = prompt("Welcome to GREEN Hub! Enter your username:") || "Anonymous";
+
+    // Dynamic protocol check: use wss:// for production HTTPS, ws:// for local HTTP
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    
+    // Connect to our Go WebSocket backend safely across all environments
+    ws = new WebSocket(wsProtocol + window.location.host + "/ws");
+
+    ws.onopen = () => {
+        // First thing we send is our name
+        ws.send(username);
+    };
+
+    ws.onmessage = (event) => {
+        const msgDiv = document.getElementById("messages");
+        const newMsg = document.createElement("div");
+        newMsg.className = "msg-row";
+        newMsg.innerText = event.data;
+        msgDiv.appendChild(newMsg);
+        msgDiv.scrollTop = msgDiv.scrollHeight; // Auto-scroll to bottom
+    };
+
+    function sendMessage() {
+        const input = document.getElementById("msgInput");
+        if (input.value.trim() !== "") {
+            ws.send(input.value);
+            input.value = "";
+        }
+    }
+
+    function handleKey(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+</script>
