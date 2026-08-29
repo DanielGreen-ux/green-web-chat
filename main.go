@@ -25,7 +25,7 @@ var (
 	broadcast  = make(chan string)
 )
 
-// Embedded HTML so Render never loses the file
+// Embedded HTML layout
 const htmlPage = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -136,18 +136,15 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Helper function to send text directly to your Telegram Bot
-// Helper function to send text directly to your Telegram Bot with deep logging
 func sendToTelegram(message string) {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	chatID := os.Getenv("TELEGRAM_CHAT_ID")
 
 	if token == "" || chatID == "" {
-		log.Println("⚠️ Telegram forwarding skipped: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID variables.")
+		log.Println("⚠️ Telegram forwarding skipped: Missing environment keys.")
 		return
 	}
 
-	// Re-verify that %s is exactly where it needs to be inside the quotes
 	telegramURL := fmt.Sprintf("https://telegram.org", token)
 
 	formData := url.Values{
@@ -158,16 +155,35 @@ func sendToTelegram(message string) {
 	go func() {
 		resp, err := http.PostForm(telegramURL, formData)
 		if err != nil {
-			log.Printf("❌ Network Error: Failed to hit Telegram API endpoint: %v", err)
+			log.Printf("❌ Telegram API Connection Error: %v", err)
 			return
 		}
 		defer resp.Body.Close()
 
-		// If Telegram rejects our key or Chat ID, print their exact response code
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("❌ Telegram API Rejection: Server returned bad status code: %d. Check your Bot Token and Chat ID accuracy!", resp.StatusCode)
+			log.Printf("❌ Telegram API Rejection Status Code: %d", resp.StatusCode)
 		} else {
-			log.Println("✅ Success: Review notification forwarded smoothly to Telegram phone engine.")
+			log.Println("✅ Success: Notification forwarded smoothly to Telegram.")
 		}
 	}()
+}
+
+func handleMessages() {
+	for {
+		msg := <-broadcast
+		fmt.Println(msg)
+
+		// Fire off the background notification forwarding task
+		sendToTelegram(msg)
+
+		clientsMu.Lock()
+		for client := range webClients {
+			err := client.WriteMessage(websocket.TextMessage, []byte(msg))
+			if err != nil {
+				client.Close()
+				delete(webClients, client)
+			}
+		}
+		clientsMu.Unlock()
+	}
 }
