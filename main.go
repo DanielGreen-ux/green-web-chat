@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 
@@ -135,10 +136,39 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Helper function to send text directly to your Telegram Bot
+func sendToTelegram(message string) {
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	chatID := os.Getenv("TELEGRAM_CHAT_ID")
+
+	if token == "" || chatID == "" {
+		return
+	}
+
+	// Formatted URL specifically targeted at Telegram's message router
+	telegramURL := fmt.Sprintf("https://telegram.org", token)
+
+	formData := url.Values{
+		"chat_id": {chatID},
+		"text":    {message},
+	}
+
+	go func() {
+		_, err := http.PostForm(telegramURL, formData)
+		if err != nil {
+			log.Printf("Failed to forward message to Telegram: %v", err)
+		}
+	}()
+}
+
 func handleMessages() {
 	for {
 		msg := <-broadcast
 		fmt.Println(msg)
+
+		// Forward the message to Telegram
+		sendToTelegram(msg)
+
 		clientsMu.Lock()
 		for client := range webClients {
 			err := client.WriteMessage(websocket.TextMessage, []byte(msg))
