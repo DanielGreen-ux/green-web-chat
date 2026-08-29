@@ -137,15 +137,17 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper function to send text directly to your Telegram Bot
+// Helper function to send text directly to your Telegram Bot with deep logging
 func sendToTelegram(message string) {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	chatID := os.Getenv("TELEGRAM_CHAT_ID")
 
 	if token == "" || chatID == "" {
+		log.Println("⚠️ Telegram forwarding skipped: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID variables.")
 		return
 	}
 
-	// Formatted URL specifically targeted at Telegram's message router
+	// Re-verify that %s is exactly where it needs to be inside the quotes
 	telegramURL := fmt.Sprintf("https://telegram.org", token)
 
 	formData := url.Values{
@@ -154,29 +156,18 @@ func sendToTelegram(message string) {
 	}
 
 	go func() {
-		_, err := http.PostForm(telegramURL, formData)
+		resp, err := http.PostForm(telegramURL, formData)
 		if err != nil {
-			log.Printf("Failed to forward message to Telegram: %v", err)
+			log.Printf("❌ Network Error: Failed to hit Telegram API endpoint: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		// If Telegram rejects our key or Chat ID, print their exact response code
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("❌ Telegram API Rejection: Server returned bad status code: %d. Check your Bot Token and Chat ID accuracy!", resp.StatusCode)
+		} else {
+			log.Println("✅ Success: Review notification forwarded smoothly to Telegram phone engine.")
 		}
 	}()
-}
-
-func handleMessages() {
-	for {
-		msg := <-broadcast
-		fmt.Println(msg)
-
-		// Forward the message to Telegram
-		sendToTelegram(msg)
-
-		clientsMu.Lock()
-		for client := range webClients {
-			err := client.WriteMessage(websocket.TextMessage, []byte(msg))
-			if err != nil {
-				client.Close()
-				delete(webClients, client)
-			}
-		}
-		clientsMu.Unlock()
-	}
 }
