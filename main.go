@@ -148,6 +148,7 @@ func sendToTelegram(message string) {
 	// This exact string layout forces the traffic gateway to connect correctly
 	telegramURL := "https://telegram.org" + token + "/sendMessage"
 
+
 	formData := url.Values{
 		"chat_id": {chatID},
 		"text":    {message},
